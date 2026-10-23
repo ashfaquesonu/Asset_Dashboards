@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project-wise Performance Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#eef1f4; --surface:#ffffff; --ink:#14213d; --muted:#5f6b7d; --line:#d9dee5;
+  --c1:#14213d; --c2:#1d8a8a; --c3:#e0a526; --c4:#c8553d; --c5:#7a8fa6;
+  --radius:6px;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --bg:#0f1622; --surface:#172131; --ink:#e8edf4; --muted:#93a0b4; --line:#2a3647;
+         --c1:#8fb3e8; --c2:#3fc1c1; --c3:#f0b840; --c4:#e8745c; --c5:#7a8fa6; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "IBM Plex Sans",system-ui,sans-serif}
+.wrap{max-width:1200px;margin:0 auto;padding:28px 20px 48px}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:24px}
+h1{font:600 26px "IBM Plex Serif",Georgia,serif;margin:0 0 2px}
+.sub{color:var(--muted);margin:0}
+.upload{display:flex;align-items:center;gap:10px}
+.btn{background:var(--ink);color:var(--bg);border:0;border-radius:var(--radius);padding:10px 16px;font:500 14px inherit;font-family:inherit;cursor:pointer}
+.btn:focus-visible{outline:3px solid var(--c2);outline-offset:2px}
+#fileName{color:var(--muted);font-size:13px}
+input[type=file]{display:none}
+
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;border-left:5px solid var(--c1)}
+.kpi:nth-child(2){border-left-color:var(--c2)}
+.kpi:nth-child(3){border-left-color:var(--c3)}
+.kpi .label{color:var(--muted);font-size:13px}
+.kpi .value{font:600 38px "IBM Plex Serif",Georgia,serif;line-height:1.15;margin-top:4px}
+.kpi .note{color:var(--muted);font-size:12px}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px}
+.card h2{font:600 16px "IBM Plex Sans",sans-serif;margin:0 0 2px}
+.card .hint{color:var(--muted);font-size:12px;margin:0 0 12px}
+.chart-box{position:relative;height:320px}
+
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:600;color:var(--muted);font-size:13px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tbody tr:hover{background:color-mix(in srgb,var(--c2) 8%,transparent)}
+tfoot td{font-weight:600;border-top:2px solid var(--ink);border-bottom:0}
+.bar{display:inline-block;height:8px;background:var(--c2);border-radius:4px;vertical-align:middle;margin-right:8px}
+
+.msg{background:var(--surface);border:1px dashed var(--line);border-radius:var(--radius);padding:40px 20px;text-align:center;color:var(--muted);margin-bottom:16px}
+.warn{background:color-mix(in srgb,var(--c3) 18%,var(--surface));border:1px solid var(--c3);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:13px}
+.hidden{display:none}
+@media(max-width:820px){.kpis,.grid{grid-template-columns:1fr}.kpi .value{font-size:32px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Project-wise Performance</h1>
+      <p class="sub" id="subtitle">Load your Excel file to see claimed, qualified and meeting numbers.</p>
+    </div>
+    <div class="upload">
+      <label class="btn" for="file" tabindex="0">Choose Excel file</label>
+      <input type="file" id="file" accept=".xlsx,.xls,.xlsm">
+      <span id="fileName">Performance_ProjectWise.xlsx</span>
+    </div>
+  </header>
+
+  <div id="empty" class="msg">Click <b>Choose Excel file</b> and select <b>Performance_ProjectWise.xlsx</b>. The file is read in your browser and is not uploaded anywhere.</div>
+  <div id="warn" class="warn hidden"></div>
+
+  <section id="dash" class="hidden">
+    <div class="kpis">
+      <div class="kpi"><div class="label">Total claimed</div><div class="value" id="kClaimed">0</div><div class="note" id="nClaimed"></div></div>
+      <div class="kpi"><div class="label">Total qualified</div><div class="value" id="kQual">0</div><div class="note" id="nQual"></div></div>
+      <div class="kpi"><div class="label">Total meetings</div><div class="value" id="kMeet">0</div><div class="note" id="nMeet"></div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h2>Team-wise claimed, qualified and meetings</h2>
+      <p class="hint" id="hint1"></p>
+      <div class="chart-box" style="height:380px"><canvas id="chartTeam"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Qualified count by project</h2>
+      <p class="hint">One row per project sheet, highest first</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Project</th><th class="num">Agents</th><th class="num">Qualified</th><th>Share of qualified</th><th class="num">Meetings</th></tr></thead>
+          <tbody id="tbody"></tbody>
+          <tfoot id="tfoot"></tfoot>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ---------- Column keywords: edit these if your headers use other words ---------- */
+const KEYS = {
+  team:      /team/i,
+  agent:     /agent|name|employee|caller/i,
+  claimed:   /claim/i,
+  qualified: /qualif/i,
+  meetings:  /meeting|appoint/i,
+  status:    /status/i
+};
+/* --------------------------------------------------------------------------------- */
+
+const fmt = n => Number(n).toLocaleString();
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+let charts = [];
+/* Draws the count on every bar. Stacked charts: inside the segment. Grouped charts: above the bar. */
+const valueLabels = {
+  id:'valueLabels',
+  afterDatasetsDraw(chart){
+    const {ctx} = chart, stacked = chart.options.scales.x.stacked;
+    ctx.save();
+    ctx.font = '600 12px "IBM Plex Sans", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    chart.data.datasets.forEach((ds, di) => {
+      chart.getDatasetMeta(di).data.forEach((bar, i) => {
+        const v = ds.data[i];
+        if (!v) return;
+        const h = Math.abs(bar.base - bar.y);
+        if (stacked){
+          if (h < 16) return;
+          ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle';
+          ctx.fillText(fmt(v), bar.x, bar.y + h/2);
+        } else {
+          ctx.fillStyle = css('--ink'); ctx.textBaseline = 'bottom';
+          ctx.fillText(fmt(v), bar.x, bar.y - 4);
+        }
+      });
+    });
+    ctx.restore();
+  }
+};
+
+
+document.getElementById('file').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  document.getElementById('fileName').textContent = f.name;
+  const r = new FileReader();
+  r.onload = ev => {
+    try { build(XLSX.read(ev.target.result, {type:'array'})); }
+    catch (err) { showWarn('Could not read this file: ' + err.message); }
+  };
+  r.readAsArrayBuffer(f);
+});
+
+function showWarn(t){ const w = document.getElementById('warn'); w.innerHTML = t; w.classList.toggle('hidden', !t); }
+
+/* Read a sheet into {headers, rows}; header row = first row with 2+ filled cells */
+function readSheet(ws){
+  const a = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:true});
+  const hi = a.findIndex(r => r.filter(c => String(c).trim() !== '').length >= 2);
+  if (hi < 0) return {headers:[], rows:[]};
+  const headers = a[hi].map(h => String(h).trim());
+  const rows = a.slice(hi+1).filter(r => r.some(c => String(c).trim() !== ''));
+  return {headers, rows};
+}
+const findCol = (h, re, skip=[]) => h.findIndex((x,i) => re.test(x) && !skip.includes(i));
+const isTotalRow = r => r.some(c => /^(grand\s*)?total$/i.test(String(c).trim()));
+
+/* Numeric -> sum. Text status -> count of rows that are a real "yes". */
+function colTotal(rows, ci){
+  if (ci < 0) return null;
+  let sum = 0, numeric = 0, count = 0;
+  rows.forEach(r => {
+    const v = r[ci];
+    if (typeof v === 'number') { sum += v; numeric++; }
+    else if (String(v).trim() && !/^(no|n|0|-|na|n\/a|not.*|false|pending)$/i.test(String(v).trim())) count++;
+  });
+  return numeric ? sum : count;
+}
+
+const norm = v => String(v).toLowerCase().replace(/\s+/g,' ').trim();
+const isNo = v => /^(no|n|0|-|na|n\/a|not.*|false|pending)$/i.test(String(v).trim());
+/* Column mode: numbers are added up, text statuses are counted as 1 per filled row */
+const colMode = (rows, ci) => rows.some(r => typeof r[ci] === 'number') ? 'num' : 'txt';
+const rowVal = (v, mode) => mode === 'num' ? (typeof v === 'number' ? v : 0) : (String(v).trim() && !isNo(v) ? 1 : 0);
+
+function build(wb){
+  const names = wb.SheetNames;
+  if (names.length < 2) return showWarn('The workbook needs a team sheet plus at least one project sheet.');
+  const notes = [];
+
+  /* ----- Sheet 1: map every agent to a team ----- */
+  const team = readSheet(wb.Sheets[names[0]]);
+  const tH = team.headers;
+  let tTeam = findCol(tH, KEYS.team); if (tTeam < 0) tTeam = 1;
+  let tAgent = findCol(tH, KEYS.agent, [tTeam]); if (tAgent < 0) tAgent = tTeam === 0 ? 1 : 0;
+  const agentTeam = new Map(), teamOrder = [];
+  team.rows.forEach(r => {
+    const a = norm(r[tAgent]), t = String(r[tTeam]).trim();
+    if (!a || !t) return;
+    agentTeam.set(a, t);
+    if (!teamOrder.includes(t)) teamOrder.push(t);
+  });
+  if (!agentTeam.size) return showWarn('Could not read agent and team names from sheet "' + names[0] + '". Headers found: ' + tH.join(', '));
+
+  /* ----- Other sheets: project performance, rolled up to teams through the agent name ----- */
+  const projects = [], teamStats = {}, unmatched = new Set();
+  const bucket = t => teamStats[t] || (teamStats[t] = {claimed:0, qualified:0, meetings:0, agents:new Set()});
+  names.slice(1).forEach(n => {
+    const s = readSheet(wb.Sheets[n]);
+    const q = findCol(s.headers, KEYS.qualified), m = findCol(s.headers, KEYS.meetings), c = findCol(s.headers, KEYS.claimed);
+    if (q < 0 && m < 0) { notes.push('Skipped sheet "' + n + '": no Qualified or Meetings column.'); return; }
+    /* agent column = the one whose values match the most names from the team sheet */
+    let best = -1, bestHits = 0;
+    s.headers.forEach((h, i) => {
+      if ([q, m, c].includes(i)) return;
+      const hits = s.rows.filter(r => agentTeam.has(norm(r[i]))).length;
+      if (hits > bestHits) { bestHits = hits; best = i; }
+    });
+    if (best < 0) best = findCol(s.headers, KEYS.agent);
+    if (best < 0) { notes.push('Skipped sheet "' + n + '": no agent column matching the team sheet names.'); return; }
+    const rows = s.rows.filter(r => !isTotalRow(r) && String(r[best]).trim() !== '');
+    const modes = {c: c >= 0 ? colMode(rows, c) : null, q: q >= 0 ? colMode(rows, q) : null, m: m >= 0 ? colMode(rows, m) : null};
+    const proj = {name:n, agents:new Set(), claimed:0, qualified:0, meetings:0};
+    rows.forEach(r => {
+      const key = norm(r[best]);
+      const t = agentTeam.get(key) || 'Unassigned';
+      if (t === 'Unassigned') unmatched.add(String(r[best]).trim());
+      const cv = c >= 0 ? rowVal(r[c], modes.c) : 0, qv = q >= 0 ? rowVal(r[q], modes.q) : 0, mv = m >= 0 ? rowVal(r[m], modes.m) : 0;
+      const b = bucket(t); b.claimed += cv; b.qualified += qv; b.meetings += mv; b.agents.add(key);
+      proj.claimed += cv; proj.qualified += qv; proj.meetings += mv; proj.agents.add(key);
+    });
+    proj.agents = proj.agents.size;
+    projects.push(proj);
+  });
+  if (!projects.length) return showWarn('No project sheets could be analyzed. Check the header names against KEYS in the script.');
+  if (unmatched.size) notes.push(unmatched.size + ' agent name(s) in the project sheets were not found in the team sheet and are shown as "Unassigned": ' + [...unmatched].slice(0, 8).join(', ') + (unmatched.size > 8 ? ', ...' : ''));
+  if (!projects.some(p => p.claimed)) notes.push('No Claimed column found in the project sheets, so Claimed shows 0. Check KEYS.claimed.');
+
+  const sum = k => projects.reduce((a, p) => a + p[k], 0);
+  const claimed = sum('claimed'), qualified = sum('qualified'), meetings = sum('meetings');
+
+  /* ----- KPIs ----- */
+  document.getElementById('kClaimed').textContent = fmt(claimed);
+  document.getElementById('kQual').textContent = fmt(qualified);
+  document.getElementById('kMeet').textContent = fmt(meetings);
+  document.getElementById('nClaimed').textContent = projects.length + ' project sheets';
+  document.getElementById('nQual').textContent = claimed ? Math.round(qualified / claimed * 100) + '% of claimed' : '';
+  document.getElementById('nMeet').textContent = qualified ? Math.round(meetings / qualified * 100) + '% of qualified' : '';
+  document.getElementById('subtitle').textContent = names.length + ' sheets analyzed: ' + agentTeam.size + ' agents in ' + teamOrder.length + ' teams, ' + projects.length + ' projects';
+  document.getElementById('hint1').textContent = 'Agents matched to teams using sheet "' + names[0] + '"';
+
+  /* ----- Table ----- */
+  const sorted = [...projects].sort((a, b) => b.qualified - a.qualified);
+  const max = Math.max(...sorted.map(p => p.qualified), 1);
+  document.getElementById('tbody').innerHTML = sorted.map(p =>
+    `<tr><td>${esc(p.name)}</td><td class="num">${fmt(p.agents)}</td><td class="num">${fmt(p.qualified)}</td>
+     <td><span class="bar" style="width:${Math.round(p.qualified / max * 120)}px"></span>${qualified ? Math.round(p.qualified / qualified * 100) : 0}%</td>
+     <td class="num">${fmt(p.meetings)}</td></tr>`).join('');
+  document.getElementById('tfoot').innerHTML =
+    `<tr><td>Total</td><td class="num">${fmt(new Set(Object.values(teamStats).flatMap(t => [...t.agents])).size)}</td><td class="num">${fmt(qualified)}</td><td></td><td class="num">${fmt(meetings)}</td></tr>`;
+
+  /* ----- Chart: team-wise claimed, qualified, meetings ----- */
+  const labels = teamOrder.filter(t => teamStats[t]);
+  if (teamStats['Unassigned']) labels.push('Unassigned');
+  charts.forEach(c => c.destroy()); charts = [];
+  const grid = css('--line');
+  Chart.defaults.font.family = '"IBM Plex Sans", system-ui, sans-serif';
+  Chart.defaults.color = css('--muted');
+  const series = [['Claimed', 'claimed', '--c1'], ['Qualified', 'qualified', '--c2'], ['Meetings', 'meetings', '--c3']];
+  charts.push(new Chart(document.getElementById('chartTeam'), {
+    type: 'bar',
+    data: {labels, datasets: series.map(([name, k, col]) => ({label: name, data: labels.map(t => teamStats[t][k]), backgroundColor: css(col), borderRadius: 3}))},
+    options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {position: 'bottom'}}, layout: {padding: {top: 18}},
+      scales: {x: {grid: {display: false}}, y: {beginAtZero: true, grace: '8%', grid: {color: grid}}}},
+    plugins: [valueLabels]
+  }));
+
+  showWarn(notes.join('<br>'));
+  document.getElementById('empty').classList.add('hidden');
+  document.getElementById('dash').classList.remove('hidden');
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+</script>
+</body>
+</html>
