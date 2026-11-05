@@ -30,6 +30,8 @@ from datetime import date, datetime, timezone
 
 import requests
 from flask import Flask, Response, jsonify, request
+from flask_cors import CORS  # <--- Add this
+
 
 # For local testing you can paste your webhook between the quotes on the next line.
 # When you put this file online, leave it empty and use the BITRIX_WEBHOOK setting instead.
